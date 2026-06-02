@@ -217,7 +217,7 @@ function PrintContent() {
         </table>
 
         {/* Signature */}
-        <div style={{ marginTop: "20px", display: "flex", justifyContent: "flex-end" }}>
+        <div style={{ marginTop: "48px", display: "flex", justifyContent: "flex-end" }}>
           <div style={{ textAlign: "center", fontSize: "11px", fontWeight: "600" }}>
             Naib Tehsildar, Nilokheri
           </div>
