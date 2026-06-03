@@ -97,16 +97,29 @@ export function parseExcelFile(buffer: ArrayBuffer): ParsedExcelData {
     }
   }
 
-  // ── 2. Locate the data block ──────────────────────────────────────────────
-  // Find the first row whose first cell is a serial number (row 1, 2, 3…).
-  // Everything before that is headers/title. Everything after is data.
+  // ── 2. Locate data block and detect header ───────────────────────────────
+  // Find the first row whose first cell is a serial number (1, 2, 3…).
   let dataStart = 0
   for (let i = 0; i < rows.length; i++) {
     const row = rows[i]
     if (row && isSerial(row[0])) { dataStart = i; break }
   }
 
-  // ── 3. Walk data rows: count deeds and look for a total row ──────────────
+  // The row just before data is the header row — find "Service Name" column
+  let serviceNameColIdx = -1
+  if (dataStart > 0) {
+    const headerRow = rows[dataStart - 1]
+    if (headerRow) {
+      headerRow.forEach((cell, idx) => {
+        const s = String(cell ?? '').toLowerCase().trim()
+        if (s.includes('service name') || s === 'service') {
+          serviceNameColIdx = idx
+        }
+      })
+    }
+  }
+
+  // ── 3. Walk data rows: count deeds and find total row ────────────────────
   let registeredDeeds = 0
   let amountReceived  = 0
 
@@ -120,37 +133,53 @@ export function parseExcelFile(buffer: ArrayBuffer): ParsedExcelData {
 
     // ── Total / summary row ──
     if (row.some(isTotalLabel)) {
-      // Collect all positive numbers not in a label cell
+      // Sum ALL positive numbers in this row (covers Service Amount + Any Other Amount)
       const nums = row
         .filter(c => !isTotalLabel(c))
         .map(c => toNum(c))
         .filter(n => n > 0)
-        .sort((a, b) => b - a)          // descending
+        .sort((a, b) => b - a)           // descending
 
       if (nums.length === 1) {
         amountReceived = nums[0]
       } else if (nums.length > 1) {
-        // If the largest value equals the sum of the rest → it IS the grand total
-        const largest  = nums[0]
-        const sumRest  = nums.slice(1).reduce((a, b) => a + b, 0)
-        amountReceived = Math.abs(largest - sumRest) < 1 ? largest
-                                                         : nums.reduce((a, b) => a + b, 0)
+        // If largest == sum of the rest → it's already a grand total, use it directly
+        // Otherwise sum all columns (e.g. Service Amount + Other Amount)
+        const largest = nums[0]
+        const sumRest = nums.slice(1).reduce((a, b) => a + b, 0)
+        amountReceived = Math.abs(largest - sumRest) < 1
+          ? largest
+          : nums.reduce((a, b) => a + b, 0)
       }
 
-      // Back-fill deed count if not yet accumulated
+      // Back-fill deed count if total row came before we counted
       if (registeredDeeds === 0) {
         for (let j = dataStart; j < i; j++) {
-          if (rows[j] && isSerial(rows[j][0])) registeredDeeds++
+          const r = rows[j]
+          if (!r || !isSerial(r[0])) continue
+          if (serviceNameColIdx >= 0) {
+            if (/deed/i.test(String(r[serviceNameColIdx] ?? ''))) registeredDeeds++
+          } else {
+            registeredDeeds++
+          }
         }
       }
       break
     }
 
-    // ── Normal data row ──
-    if (isSerial(row[0])) registeredDeeds++
+    // ── Normal data row: count only if service name contains "deed" ──
+    if (isSerial(row[0])) {
+      if (serviceNameColIdx >= 0) {
+        // Filter by service name — only deed entries count
+        if (/deed/i.test(String(row[serviceNameColIdx] ?? ''))) registeredDeeds++
+      } else {
+        // No service name column found — count all rows
+        registeredDeeds++
+      }
+    }
   }
 
-  // ── 4. Fallback deed count: any row whose first cell is a serial number ───
+  // ── 4. Fallback deed count if nothing was found ───────────────────────────
   if (registeredDeeds === 0) {
     for (const row of rows) {
       if (row && isSerial(row[0])) registeredDeeds++
