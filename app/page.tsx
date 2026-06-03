@@ -36,8 +36,14 @@ export default function Home() {
     setFileName(file.name);
     setErrorMsg("");
     try {
-      const buf  = await file.arrayBuffer();
-      const data = parseExcelFile(buf);
+      let data: ParsedExcelData;
+      try {
+        const buf = await file.arrayBuffer();
+        data = parseExcelFile(buf);
+      } catch {
+        setErrorMsg("Failed to parse the Excel file. Ensure it is a valid DITS .xlsx file.");
+        setStage("error"); return;
+      }
       if (!data.date) {
         setErrorMsg("Could not detect a date in this file. Check the Excel format.");
         setStage("error"); return;
@@ -47,13 +53,15 @@ export default function Home() {
         setStage("error"); return;
       }
       setParsed(data);
-      const existing: { date: string }[] = await fetch("/api/entries").then((r) => r.json());
-      setExistsWarn(existing.some((e) => e.date === data.date));
+      try {
+        const res = await fetch("/api/entries");
+        const existing: { date: string }[] = res.ok ? await res.json() : [];
+        setExistsWarn(Array.isArray(existing) && existing.some((e) => e.date === data.date));
+      } catch {
+        // Non-fatal — just skip the duplicate check
+        setExistsWarn(false);
+      }
       setStage("preview");
-    } catch {
-      setErrorMsg("Failed to parse the file. Ensure it matches the DITS Excel format.");
-      setStage("error");
-    }
   }, []);
 
   const handleDrop = useCallback((e: React.DragEvent) => {
