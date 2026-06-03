@@ -63,6 +63,11 @@ export default function Home() {
         setExistsWarn(false);
       }
       setStage("preview");
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      setErrorMsg(`Unexpected error: ${msg}`);
+      setStage("error");
+    }
   }, []);
 
   const handleDrop = useCallback((e: React.DragEvent) => {
