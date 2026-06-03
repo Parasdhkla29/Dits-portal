@@ -40,8 +40,9 @@ export default function Home() {
       try {
         const buf = await file.arrayBuffer();
         data = parseExcelFile(buf);
-      } catch {
-        setErrorMsg("Failed to parse the Excel file. Ensure it is a valid DITS .xlsx file.");
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        setErrorMsg(`Could not read the file: ${msg}`);
         setStage("error"); return;
       }
       if (!data.date) {

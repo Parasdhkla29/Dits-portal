@@ -61,11 +61,20 @@ function isTotalLabel(val: unknown): boolean {
 // ── main export ───────────────────────────────────────────────────────────────
 
 export function parseExcelFile(buffer: ArrayBuffer): ParsedExcelData {
-  const workbook = XLSX.read(new Uint8Array(buffer), {
-    type: 'array',
-    cellDates: false,
-    raw: true,
-  })
+  // Try multiple read strategies so both .xlsx and older .xls formats work
+  let workbook: XLSX.WorkBook
+  try {
+    workbook = XLSX.read(new Uint8Array(buffer), {
+      type: 'array', cellDates: false, raw: true,
+    })
+  } catch {
+    // Fallback: read as binary string (handles some legacy .xls files)
+    const decoder = new TextDecoder('latin1')
+    const bstr = decoder.decode(buffer)
+    workbook = XLSX.read(bstr, {
+      type: 'binary', cellDates: false, raw: true,
+    })
+  }
 
   const sheetName = workbook.SheetNames[0]
   const sheet = sheetName ? workbook.Sheets[sheetName] : null
